@@ -1,55 +1,46 @@
-import mysql.connector
-import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
+import pandas as pd
+import mysql.connector
+import plotly.express as px
 
-st.set_page_config(page_title="Fariya Sales Dashboard", layout="wide")
+st.set_page_config(page_title="Sales Analysis Dashboard - Fariya's Project", layout="wide")
 st.title("📊 Sales Analysis Dashboard - Fariya's Project")
 
-# No password needed
-conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="fariya123",
-    database="sales_analysis"
-)
+# Try MySQL, if fails use Sample Data (for Cloud)
+try:
+    conn = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="root",
+        database="sales_analysis"
+    )
+    query = "SELECT * FROM orders JOIN customers ON orders.customer_id = customers.customer_id JOIN products ON orders.product_id = products.product_id"
+    df = pd.read_sql(query, conn)
+    conn.close()
+    st.success("Connected to MySQL - Live Data")
+except Exception as e:
+    st.warning("Cloud Demo Mode: Showing sample data (MySQL is local only)")
+    # Sample data for cloud demo
+    data = {
+        'order_date': pd.date_range('2024-01-01', periods=100, freq='D'),
+        'amount': [2000, 3500, 1500, 4000, 2800]*20,
+        'category': ['Electronics', 'Clothing', 'Books', 'Electronics', 'Clothing']*20,
+        'customer_name': ['Fariya', 'Ali', 'Sara']*33 + ['Fariya'],
+        'product_name': ['Laptop', 'Shirt', 'Novel', 'Mobile', 'Jeans']*20
+    }
+    df = pd.DataFrame(data)
 
-# Queries
-q1 = pd.read_sql("""
-    SELECT c.city, SUM(p.price*o.quantity) as total_sales 
-    FROM orders o 
-    JOIN customers c ON o.customer_id=c.customer_id 
-    JOIN products p ON o.product_id=p.product_id 
-    GROUP BY c.city ORDER BY total_sales DESC
-""", conn)
+# Dashboard
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Sales", f"₹{df['amount'].sum():,}")
+col2.metric("Total Orders", len(df))
+col3.metric("Avg Order", f"₹{df['amount'].mean():.0f}")
 
-q2 = pd.read_sql("""
-    SELECT p.category, SUM(p.price*o.quantity) as total_sales 
-    FROM orders o JOIN products p ON o.product_id=p.product_id 
-    GROUP BY p.category
-""", conn)
+fig1 = px.line(df.groupby('order_date')['amount'].sum().reset_index(), x='order_date', y='amount', title="Sales Over Time")
+st.plotly_chart(fig1, use_container_width=True)
 
-q3 = pd.read_sql("""
-    SELECT MONTH(order_date) as month, SUM(p.price*o.quantity) as total_sales 
-    FROM orders o JOIN products p ON o.product_id=p.product_id 
-    GROUP BY MONTH(order_date) ORDER BY month
-""", conn)
+fig2 = px.bar(df.groupby('category')['amount'].sum().reset_index(), x='category', y='amount', title="Sales by Category")
+st.plotly_chart(fig2, use_container_width=True)
 
-# Display
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Sales by City (Your Q1)")
-    st.bar_chart(q1.set_index('city'))
-    st.dataframe(q1)
-
-with col2:
-    st.subheader("Sales by Category (Your Q2)")
-    st.bar_chart(q2.set_index('category'))
-    st.dataframe(q2)
-
-st.subheader("Monthly Sales Trend (Your Q3)")
-st.line_chart(q3.set_index('month'))
-st.dataframe(q3)
-
-st.success("Database: sales_analysis | Tables: customers, products, orders")
+st.dataframe(df.head(20))
+st.caption("Tech Stack: MySQL + Python + Streamlit | By Fariya2026")
